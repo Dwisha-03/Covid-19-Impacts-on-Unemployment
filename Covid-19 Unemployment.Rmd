@@ -1,0 +1,578 @@
+---
+title: "Final_project"
+output:
+  html_document: default
+date: '2022-04-12'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Information**
+
+This project contains various data visualizations and statistical observations of Covid and Unemployment during the years 2019, 2020, 2021. It will yield some of the important results about Covid trends.
+
+**Libraries**
+
+I have installed various different libraries that helped me in making data visualizations
+
+```{r libraries}
+library(tidyverse)
+library(here)
+library(janitor)
+library(rvest)
+library(plotly)
+library(readxl)
+library(lubridate)
+library(dplyr)
+library(ggbeeswarm)
+library(RSelenium)
+library(jsonlite)
+library(ggthemes)
+library(readr)
+library(RSocrata)
+library(RSelenium)
+library(robotstxt)
+library(readr) 
+library(base)
+library(ggplot2)
+library(tidycensus)
+library(sf)
+library(usmap)
+library(reshape2)
+library(scales)
+library(tabulizer)
+library(zoo)
+library(plotrix)
+```
+
+**Data**
+
+I have used four datasets for making analysis in this project
+
+Covid data: This dataset contains information about new cases, new cases, total cases for each state in the years from 2019 to 2022.
+This dataset is obtained from CDC (Center of Disease Control and Prevention)- https://data.cdc.gov/Case-Surveillance/United-States-COVID-19-Cases-and-Deaths-by-State-o/9mfq-cb36/data
+Read this data directly from the csv file after importing this dataset in this project.
+
+
+Vaccine data: This dataset contains information about total vaccines distributed and the type of vaccine distributed for each state in the years from 2019 to 2022.
+This dataset is obtained from CDC (Center of Disease Control and Prevention)- https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-Jurisdi/unsk-b7fc/data
+Read this data directly from the csv file after importing this dataset in this project.
+
+
+Unemployment2019_2020 data: This dataset contains information about unemployment rate for the year 2019 and 2020 for each state and also provides information about the change over the year.
+This dataset is obtained from US Bureau of Labor Statistics- https://www.bls.gov/lau/lastch20.htm
+Read this data using webscrapping method with the use of selector gadget function.
+
+
+Unemployment2020_2021 data: This dataset contains information about unemployment rate for the year 2020 and 2021 for each state and also provides information about the change over the year.
+This dataset is obtained from US Bureau of Labor Statistics-
+https://www.bls.gov/lau/lastch21.htm
+Read this data using webscrapping method with the use of selector gadget function.
+
+```{r Read_data }
+#Read data
+covid_data <-read_csv("United_States_COVID-19_Cases_and_Deaths_by_State_over_Time.csv")
+
+vaccine_data <- read_csv("COVID-19_Vaccinations_in_the_United_States_Jurisdiction.csv")
+
+
+url <- "https://www.bls.gov/lau/lastch20.htm"
+robotstxt::paths_allowed(url)
+unemployment2019_2020 <- read_html(url) %>% html_elements("#lastch20") %>% .[[1]]  %>%
+  html_table()
+
+url <- "https://www.bls.gov/lau/lastch21.htm"
+robotstxt::paths_allowed(url)
+unemployment2020_2021 <- read_html(url) %>% html_elements("#lastch21") %>% .[[1]]  %>%
+  html_table()
+```
+From the covid dataset, useful and interesting variables has been selected for making further analysis. 
+Also, renamed the variable date and changed it to mdy format.
+
+```{r data_cleaning1}
+#clean covid dataset
+covid_data <- covid_data %>%
+  select(state, submission_date, tot_cases, new_case, tot_death, new_death) %>%
+  rename(date = submission_date) %>%
+  mutate(date = mdy(date))
+covid_data 
+```
+
+From the vaccine dataset, useful and interesting variables has been selected for making further analysis. 
+Also, renamed the variable date and state. For state and date, each dataset had different variable names so I changed it so that it is consistent. Also, changed the variable "date" to mdy format.
+
+```{r data_cleaning2}
+#clean vaccine dataset
+vaccine_data <- vaccine_data %>%
+  select(Location, Date, Distributed, Distributed_Janssen, Distributed_Moderna, Distributed_Pfizer, Administered_Dose1_Recip, Series_Complete_Yes, Series_Complete_Janssen, Series_Complete_Moderna, Series_Complete_Pfizer ) %>%
+  rename(state = Location, date = Date) %>%
+   mutate(date = mdy(date))
+vaccine_data
+```
+
+While scrapping the table for the unemployment dataset, the table didn't come out very clean as the column "Over the year" was further bifurcated into two columns "Change" and "Rank". For cleaning this dataset, I did various steps:
+
+1) Deleted the first and second rows as first row had repeated column names and second row had the information for the United States and not the state.
+2) Deleted the last row because information in the last row was not quite useful
+3) As the dataset had duplicated names for the variable "Over the year", I used make.names which would automatically make own names.
+4) Renamed the variables according to my choice
+5) The covid dataset and vaccine dataset had state abbreviations for the variable "State" but this dataset contained full names of the state so full names were changed to abbreviations for showing consistency throughout the project.
+6) Lastly, after performing these steps, a specific row having NA was deleted
+
+
+```{r data_cleaning3}
+#clean unemployment dataset
+unemployment2019_2020<- unemployment2019_2020[-c(1, 2),]
+unemployment2019_2020 <- head(unemployment2019_2020, -1)
+names(unemployment2019_2020) <- make.names(names(unemployment2019_2020), unique=TRUE)
+unemployment2019_2020data <- unemployment2019_2020 %>%
+rename(`2019_rate` = `X2019rate`, `2020_rate` = `X2020rate`,`change` = `Over.the.year`, rank = `Over.the.year.1`, state = State)
+unemployment2019_2020data$state <- state.abb[match(unemployment2019_2020data$state,state.name)]
+unemployment2019_2020data<- unemployment2019_2020data[-1,]
+unemployment2019_2020data
+```
+Performed similar cleaning process to that of the above unemployment dataset 
+
+```{r data_cleaning4}
+unemployment2020_2021<- unemployment2020_2021[-c(1, 2),]
+unemployment2020_2021 <- head(unemployment2020_2021, -1)
+names(unemployment2020_2021) <- make.names(names(unemployment2020_2021), unique=TRUE)
+unemployment2020_2021data <- unemployment2020_2021 %>%
+rename(`2020_rate` = `X2020rate`, `2021_rate` = `X2021rate`,`change` = `Over.the.year`, rank = `Over.the.year.1`, state = State)
+unemployment2020_2021data$state <- state.abb[match(unemployment2020_2021data$state,state.name)]
+unemployment2020_2021data<- unemployment2020_2021data[-1,]
+unemployment2020_2021data
+
+```
+
+Added sql connection here
+Also, changed variable "date" in covid dataset to as.character 
+
+```{r program}
+con <- DBI::dbConnect(RSQLite::SQLite(), dbname = "Final_project.sqlite")
+
+covid_data$date <- as.character(covid_data$date)
+```
+
+While creating a new table, overwrite = T was used in order to prevent getting an error about the existing table when running the program again
+
+```{r program1}
+dbWriteTable(con, "covid_trend", covid_data, overwrite = T)
+```
+
+Using sql, I tried getting the month out of the "date" variable for only the year 2020
+
+```{sql, connection = con, output.var = "covid_2020"}
+
+select sum(new_case) as total_cases, sum(new_death) as total_death,
+                        strftime('%m', date) as month
+                      from covid_trend where date >= '2020-01-01' and date <= '2020-12-31'
+                       group by month
+```
+
+
+```{r covid_2020 trend check}
+covid_trend_2020 <- covid_2020
+```
+
+Using sql, I tried getting the month out of the "date" variable for only the year 2021
+
+```{sql , connection = con, output.var = "covid_2021"}
+select sum(new_case) as total_cases, sum(new_death) as total_death,
+                        strftime('%m', date) as month
+                      from covid_trend where date >= '2021-01-01' and date <= '2021-12-31'
+                      group by month
+                      
+```
+
+```{r covid_2021 trend check}
+covid_trend_2021 <- covid_2021
+```
+
+Created a line plot here for the total cases in each Month in the year 2020
+
+```{r covidcasesplot2020}
+covid_trend_2020$month <- as.character.Date(covid_trend_2020$month)
+
+#Total cases trend by Month in 2020
+
+ggplot(covid_trend_2020, aes(month)) +
+  geom_line(aes(y = total_cases),group=1, colour = "blue", size=1.2) +
+    scale_y_continuous(labels = comma) + ggtitle("Total cases trend by Month in 2020")
+```
+Created a line plot here for the total deaths in each Month in the year 2020 
+
+Here, we can see the relationship between total cases and total deaths in the year 2020. It is possible to interpret from the covid cases plot and death plot that when there is an increase in the total cases, total deaths also increase. However, there are some outliers in the graph which can be provide contradictory results for our conclusion 
+The Month of December had the highest cases and deaths.
+
+```{r coviddeathplot2020}
+#Total death by Month in 2020
+
+ggplot(covid_trend_2020, aes(month)) +
+  geom_line(aes(y = total_death),group=1, colour = "red", size=1.2) +
+    scale_y_continuous(labels = comma)+ ggtitle("Total death by Month in 2020")
+```
+
+Created a line plot here for the total cases in each Month in the year 2021
+
+```{r covidcasesplot2021}
+#Total cases trend by Month in 2021
+
+ggplot(covid_trend_2021, aes(month)) +
+  geom_line(aes(y = total_cases),group=1, colour = "blue", size=1.2) +
+    scale_y_continuous(labels = comma)+ ggtitle("Total cases trend by Month in 2021")
+
+```
+
+Created a line plot here for the total deaths in each Month in the year 2021
+
+Here, we can see the relationship between total cases and total deaths in the year 2021. It is possible to interpret from the covid cases plot and death plot that when there is an decrease in the total cases, total deaths also decrease. However, there are some outliers in the graph which can be provide contradictory results for our conclusion 
+The Month of January had the highest cases and deaths.
+
+```{r coviddeathplot2021}
+#Total death by Month in 2021
+
+ggplot(covid_trend_2021, aes(month)) +
+  geom_line(aes(y = total_death),group=1, colour = "red", size=1.2)  +
+    scale_y_continuous(labels = comma)+ ggtitle("Total death by Month in 2021")
+
+```
+Using r code, new variable for month was created by selecting month from "date" variable
+Also, new variable for year was created using ifelse function
+The variable month was changed from numeric (01, 02) to month names (Jan, Feb)
+
+
+```{r monthdata}
+covid_data2 <- covid_data%>%
+  mutate(month = map_chr(str_split(date, "-"),2), year = ifelse(date >= as.Date("2020-01-01") & date <= as.Date("2020-12-31"),"2020", ifelse(date >= as.Date("2021-01-01") & date <= as.Date("2021-12-31"), "2021", "2022"))) %>%
+  summarize(state = state, new_case = new_case, Month = month.abb[as.numeric(month)], date = date,year = year)
+covid_data2
+```
+
+
+Created a line plot to show the impact of increasing total covid cases on deaths for the years combined 2020 and 2021 for each month
+
+The month of January for the year 2020 as well as 2021 peaked the number of covid cases
+
+```{r Lineplot}
+
+covid_data2$Month = factor(covid_data2$Month,levels=c("Jan","Feb","Mar", "April","May","June","July","Aug","Sep", "Oct","Nov","Dec"),ordered=TRUE)
+covid_data2 %>%
+  filter(!is.na(Month)) %>%
+  group_by(Month) %>%
+ggplot(aes(Month, new_case, color = Month)) +  geom_point() +  geom_line() + ylab("Total Cases By Month") +
+    scale_y_continuous(labels = comma)
+```
+
+Here, the covid data was filtered for the year 2020 and 2021
+Performed grouping and summarizing to find the total new_cases and total new_deaths for each state and year
+
+```{r data_cleaning5}
+covid_data1 <- covid_data %>%
+    filter(date >= as.Date("2020-01-01"), date <= as.Date("2021-12-31")) %>%
+  summarize(state = state, date = date, new_case = new_case, new_death = new_death,`year` = ifelse(date >= as.Date("2020-01-01") & date <= as.Date("2020-12-31"),"2020", "2021"))
+  
+covid_data1 <- covid_data1 %>%
+  group_by(state, year) %>%
+  summarise(total_cases = sum(new_case), total_deaths = sum(new_death))
+ covid_data1
+ 
+```
+As we know 2020, covid cases peaked in the year 2020 so it was interesting to find out the states that had the highest cases in the year 2020.
+
+Here are the top 10 states having the highest total_cases in the year 2020
+
+```{r States with highest cases 2020}
+highestcovid <- covid_data1 %>%
+  filter(year == 2020) %>%
+  arrange(desc(total_cases)) %>%
+  head(10)
+highestcovid
+```
+Created an interactive plot for the total cases by state
+
+Here, our statistical observations were supported by the plot
+California had the highest covid cases and Texas had the second highest covid cases in the year 2020. Also, we can see Florida and Illinois comes after Texas.  
+
+```{r mapplot2020}
+#COVID CASES IN THE YEAR 2020 
+
+covidmap2020 <- covid_data1 %>%
+   filter(year == "2020") 
+plot_usmap(data = covidmap2020, values = "total_cases", color = "red", labels = TRUE) + 
+  scale_fill_continuous(
+    low = "white", high = "red", name = "Total cases (2020)", label = scales::comma
+  ) + theme(legend.position = "right")
+```
+
+Here are the top 10 states having the highest total_cases in the year 2021
+
+```{r States with highest cases 2021}
+highestcovid <- covid_data1 %>%
+  filter(year == 2021) %>%
+  arrange(desc(total_cases)) %>%
+  head(10)
+highestcovid
+```
+Created an interactive plot for the total cases by state
+
+Here, our statistical observations were supported by the plot
+California had the highest covid cases and Florida had the second highest covid cases in the year 2020. Also, we can see Texas and New York comes after Florida.
+
+Here, it is little hard to see if NY was in the top 5 states that had the most covid cases. I tried making some changes in the code but I was unable to increase the size of it.
+
+```{r mapplot2021}
+#COVID CASES IN THE YEAR 2021
+
+covidmap2021 <- covid_data1 %>%
+   filter(year == "2021") 
+plot_usmap(data = covidmap2021, values = "total_cases", color = "blue", labels = TRUE) + 
+  scale_fill_continuous(
+    low = "white", high = "blue", name = "Total cases (2021)", label = scales::comma
+  ) + theme(legend.position = "right")
+
+```
+In order to show the skills for bar graph, I have also add the bar graph for covid cases 
+
+```{r covidplot2020}
+covidplot2020 <- covid_data1 %>%
+   filter(year == "2020") %>%
+  arrange(desc(total_cases)) 
+
+covidplot2020 %>% head(n=10) %>%
+ ggplot(aes(fct_reorder(state,total_cases), total_cases, fill=year)) +
+  geom_bar(position="dodge",stat="identity") +
+  scale_fill_brewer(type = "qual", palette = 1) +
+  xlab("States")
+```
+
+```{r covidplot2021}
+covidplot2021 <- covid_data1 %>%
+   filter(year == "2021", state %in% c("CA","TX","FL","IL","OH","GA","PA","MI","TN","NY")) %>%
+  arrange(desc(total_cases)) 
+
+ covidplot2021 %>% head(n=10) %>%
+ ggplot(aes(fct_reorder(state,total_cases), total_cases, fill=year)) +
+  geom_bar(position="dodge",stat="identity") +
+  scale_fill_brewer(type = "qual", palette = 6) +
+     xlab("States") +
+    scale_y_continuous(labels = comma)
+
+```
+Here, I merged both the unemployment dataset
+Steps:
+
+1) Selected useful variables from first unemployment
+2) Performed a left-join for joining both the unemployment datasets. The merged dataset  "unemployment_by_state" now have unemployment rates by state for the years 2019, 2020, and 2021.
+3) I saved this data in a csv file. 
+
+
+```{r Merging}
+unemployment_by_state <-unemployment2019_2020data%>%
+  select(state,`2019_rate`, `2020_rate`) %>%
+  left_join(unemployment2020_2021data) 
+
+unemployment_by_state<- unemployment_by_state%>%
+   select(state, `2019_rate`, `2020_rate`,`2021_rate`) 
+unemployment_by_state <- unemployment_by_state[complete.cases(unemployment_by_state), ] 
+unemployment_by_state 
+write.csv(unemployment_by_state,'unemployment_by_state.csv')
+```
+It is quite interesting to find out the effects of covid on unemployment. From the past visualizations, we found out the states that had the most covid cases in the year 2020 and 2021.
+
+Therefore, in order to check the covid effects on unemployment, I will be taking 7 states that has most covid cases in 2020 and 2021 
+
+5 states with most covid cases "TX","FL","IL","OH" in 2020 
+5 states with most covid cases "FL","TX","NY", "PA in 2021
+
+In order to see if there is any change in unemployment rate in the year 2020, it is important to find the unemployment rates for 2019 to observe the change. 
+
+The range of the unemployment rate in 2019 was 3.2 to 4.5
+
+```{r unemployment2019}
+unemployment_by_state2019 <-unemployment_by_state %>% 
+   filter(state %in% c("TX","FL","IL","OH","PA","NY")) %>%
+ arrange(desc(`2019_rate`)) 
+
+
+unemployment_by_state2019 %>%
+  filter(!is.na(state)) %>%
+  head(n=7) %>%
+  ggplot(aes(fct_relevel( state, 
+  `2019_rate`), `2019_rate`,
+    size = `2019_rate`, color = state )) +
+  geom_point(alpha = 0.75) +
+  scale_color_brewer(type = "qual", palette = 2) +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  xlab("States") +
+ theme(panel.background = element_rect(fill = "linen")) +
+  theme(panel.grid.major = element_line(linetype = "dotted", color = "black"))
+
+```
+
+Here is the scatterplot adjusted by size and color for the 7 states that had the most cases in 2020 and 2021
+
+The range of the unemployment rate in 2020 was 7.7 to 9.9
+
+Here, we can definitely see an increase in the range of the unemployment
+
+
+```{r unemployment2020}
+unemployment_by_state2020 <-unemployment_by_state %>% 
+   filter(state %in% c("TX","FL","IL","OH","PA","NY")) %>%
+ arrange(desc(`2020_rate`)) 
+
+unemployment_by_state2020 %>%
+  filter(!is.na(state)) %>%
+  head(n=7) %>%
+  ggplot(aes(fct_relevel( state, 
+  `2020_rate`), `2020_rate`,
+    size = `2020_rate`, color = state )) +
+  geom_point(alpha = 0.75) +
+  scale_color_brewer(type = "qual", palette = 2) +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  xlab("States") +
+ theme(panel.background = element_rect(fill = "linen")) +
+  theme(panel.grid.major = element_line(linetype = "dotted", color = "black"))
+
+```
+
+Here is the scatterplot adjusted by size and color for the 7 states that had the most cases in 2020 and 2021
+
+The range of the unemployment rate in 2020 was 4.6 to 6.9
+
+In 2021, we can see the unemployment rates going back to normal like in 2019
+
+```{r unemployment2021}
+unemployment_by_state2021 <- unemployment_by_state %>% 
+  filter(state %in% c("TX","FL","IL","OH","PA","NY")) %>%
+ arrange(desc(`2021_rate`)) 
+
+
+unemployment_by_state2021%>%
+  filter(!is.na(state)) %>%
+  head(n=7) %>%
+  ggplot(aes(fct_relevel( state, 
+   `2021_rate`), `2021_rate`,
+    size = `2021_rate`, color = state )) +
+  geom_point(alpha = 0.75) +
+  scale_color_brewer(type = "qual", palette = 2) +
+  theme_bw() +
+  theme(text = element_text(size = 12)) +
+  xlab("States")+
+ theme(panel.background = element_rect(fill = "linen")) +
+  theme(panel.grid.major = element_line(linetype = "dotted", color = "black"))
+```
+
+Here is the bar graph showing the unemployment rates of the 7 states in all the years combined 2019, 2020, and 2021
+
+It is easier to see the trend here
+
+We can connect back this to the covid trend.
+In 2020, there was an increase in the covid cases
+In 2021, there was a decrease in covid cases
+
+Therefore, it is possible to interpret that increase in covid cases can have an impact on the unemployment rates. As covid cases increases, unemployment also increases
+
+```{r Bargraph}
+#Bar graph of unemployment data for 2019, 2020, 2021
+
+unemployment_plot <- unemployment_by_state%>% 
+   filter(state %in% c("TX","FL","IL","OH","PA","NY")) %>%
+ arrange(desc(`2019_rate`))
+
+dfm1 <- pivot_longer(unemployment_plot, -state, names_to="variable", values_to="value")
+
+ggplot(dfm1,aes(x = state,y = value)) + 
+    geom_bar(aes(fill = variable),stat = "identity",position = "dodge") 
+
+```
+
+What could be the reason behind decreasing covid cases after 2020?
+Maybe: vaccination
+Here, we will see the vaccine data visualizations
+
+The Total Distribution of Vaccines by the end of 2021
+
+```{r Barplotvaccine}
+vaccine_data1 <- vaccine_data%>%
+   filter(date == "2021-12-31",state %in% c("CA","TX","FL","IL","OH","PA","NY")) %>%
+  group_by(state) %>%
+  summarize(Distributed = sum(Distributed)) %>%
+  arrange(desc(Distributed)) %>%
+ ggplot(aes(Distributed, state)) +
+  geom_bar(position="dodge",stat="identity") +
+  scale_fill_brewer(type = "qual", palette = 1) +
+  xlab("Vaccines Distributed") + scale_x_continuous(labels = comma)
+
+vaccine_data1
+```
+
+I have filtered the date "2022-04-29" in order to find out the total vaccine distribution till April 2022
+
+Here, the pie chart is little small so I have provided an image in the pdf
+
+```{r pie_chart}
+vaccine_filtered <- vaccine_data  %>% 
+  filter(date == "2022-04-29")
+
+Total <- vaccine_filtered %>%
+  mutate(percent = paste0(round(vaccine_filtered$Distributed/sum(vaccine_filtered$Distributed) * 100, 2), "%")) %>%
+  filter(state %in% c("CA","TX","FL","IL","OH","PA","NY")) 
+
+
+label <- paste(Total$percent,",",Total$state )
+
+pdf("pie_chart.pdf")
+
+pie3D(Total$Distributed,
+      col = hcl.colors(length(Total$Distributed), "Spectral"),
+      labels = label, labelcex = 0.75)
+dev.off() 
+
+#Writing same code again to print it out
+pie3D(Total$Distributed,
+      col = hcl.colors(length(Total$Distributed), "Spectral"),
+      labels = label, labelcex = 0.75)
+
+```
+
+
+
+It is interesting to find out what type was vaccine was distributed the most in US states
+
+Here, by dividing the type of distributed vaccine with the total vaccine distribution, the proportion of all the three types of distributed vaccine is calculated
+
+```{r proportion}
+vaccine_prop <- vaccine_data %>%
+    filter(state %in% c("CA","TX","FL","IL","OH","PA","NY")) %>%
+   group_by(state) %>%
+  summarise(Distributed = sum(Distributed),Distributed_Janssen = sum(Distributed_Janssen), Distributed_Moderna = sum(Distributed_Moderna), Distributed_Pfizer = sum(Distributed_Pfizer))
+vaccine_prop <- vaccine_prop %>%
+  mutate(Janssen_prop = Distributed_Janssen/Distributed, Moderna_prop =Distributed_Moderna/Distributed, Pfizer_prop = Distributed_Pfizer/ Distributed ) %>%
+  select(-Distributed, -Distributed_Janssen, -Distributed_Moderna, -Distributed_Pfizer)
+vaccine_prop 
+```
+
+Here is the pie chart of type of vaccine distributed in some of the US states 
+
+We can see that the vaccine that was distributed the most in all the states is Pfizer
+
+```{r vaccine_proportionplot}
+vaccine_propplot <-
+  pivot_longer(vaccine_prop, -state, names_to="variable", values_to="value") 
+
+
+vaccine_propplot$state <- factor(vaccine_propplot$state)
+vaccine_propplot$variable <- factor(vaccine_propplot$variable) 
+  
+ggplot(data=vaccine_propplot, aes(x=" ", y=value, group=variable, colour=variable, fill=variable)) +
+         geom_bar(width = 1, stat = "identity") +
+         coord_polar("y") +
+         facet_grid(.~ state) + facet_wrap(~state, ncol = 3)+ theme_void()
+vaccine_propplot
+```
